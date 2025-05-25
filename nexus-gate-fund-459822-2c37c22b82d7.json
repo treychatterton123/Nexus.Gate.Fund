@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "nexus-gate-fund-459822",
+  "private_key_id": "2c37c22b82d7eff67b5a068b7c53cae53cadc4e2",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDFM0/OkfSlTnYI\nS2oBFfB4onH5eVLA63DL/Hdn2xEZFe0M/nRDxe3gEcV0mk6/abJAJq1E9JJZ2Hug\nJ5Bp2VB6JSKbfsMNCELhuVYTqhT0aEgJ+P7OixTepb/hX1ycXN71Vwdm21mbKQ1G\nCcwshR+uBTmTrmPaaFX+L+tgnwbDKMxbyM+5JFy58mcYU4UOjq/Md5m8voe3XSSr\nafAvLwbxQgqyVYs2wrfosrv03rX2H2p1YJrZS6BXSGD05zlKA0sd9Ok/UpOf5WoG\nAljo76VDX1nu31/MXW12VsAO1N+zMGsdTZU8Ji2Yelx3Ta9IuXWs4OQ2XyMcX7lJ\nY9ARunjVAgMBAAECgf9BecgFznBscqC+IEwSEDbH1y5Tb75SB+qbDOwbTbSO8M0o\nvcZ2xWkkAUbFSt9QdGeVgWy0X+tIvnYMF9KIK731Cna9Xw+d2W7HVBg7nXU4XBSW\n4Jm3kPmCHQoVbqbRPmgmbLMNAYXyzv9RhxpOIJldoLe5gD8U0y5mVS9zdvN5s2Rw\nW8hNB3zfp9jjpIrIUh9Khu3NVmVDTyAHZd4+hv75PN9I4KO83iU+xFAHGKLCkPbe\ni4G1rRVtj1TP1Cv4aR3qFSlfwMSf3D5y9DP/UugO1FzVFqaMK4aSz7JrpA59ZVXG\nLV79nXkPqfIwYRZJsXvxI7FMbTGx7AJBwY4Y1GECgYEA5KN8J/OcN/aGqwAh8dCf\nG8lVQxiESBtJO2JH6pXAgSZv1cMPDJFO6/tn97IIKHA9lNRf/GWu9bYdNdUDKPFP\ndykSFBm+vluFuDuWJH/kq7jaPx9e/QR7e7OyR+zS/xhNp2d6lEBjVE3VFG6R5Ufp\nwEpskdCMTjlUoZTwD+gGMzECgYEA3EwC9pEuCIgd3W51sxJ3JO4gkQZH9Wc6n8xK\nrv3ThmhU+JeD1/B4RlbYQKf9D9n93OkXK/Ai0Zhn56PRrGHc8qYqePVDv5vmWmjZ\nHZ5Z5qzs5Gx7Cmi2O05xkzIiT0P5uAHYOHYK5n/hQxzvJ6kH5Sw3G+Kzwvzq54sE\njNzzkUUCgYEAkbWxK/PO48F1b5Wz5hGM+DKpZ5ZYj+JWG3V1BcEVvkHsf0yGwOaA\niRgWcLbNX36TYqZL1uqZR+9FsE+2ELWtq0zlZaD+a3D59D0r/uyCyoHvA75M83iY\nHn7SWSZLa9rNwDpBOJE4oWmhdoO1BxSYWvG27XXFJgfv9KQmQ9jZRiECgYEAiH6O\ntdBYkh8sTYbzVmg/HbJnXzFRJzqvKoY2SQu0xsA3Jff2ZLKkDUPpPHEiLuLxe8b4\nmIf3n42t5ue5y1yQ7YPGxPH8a5nS/3hY4+1Gg0j9PVCH9JJlZaHLe8v1/bczC4FL\nngSVzL2FRKhh60cLvh5WtWYfHj9zcV/Yzt/sOxkCgYBqSNFOIoQ3wXXJaHqTp3Io\nqyoXlC4FdGPv++XuQfaNPZZBf9SLt/z7fJcm70O4YXaX0xjDRELyv4LXUMgzRZR9\n42+w0GXoFNcMLQNnYNAx2hIqWe9CdDQhUGIjkNYlGHWICsAL3E2uaSvNX/hcQ2i9\n0vGYZdUeJIzPSlR1bnF+xw==\n-----END PRIVATE KEY-----\n",
+  "client_email": "nexus-trading-bot@nexus-gate-fund-459822.iam.gserviceaccount.com",
+  "client_id": "118187279254164773106",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/nexus-trading-bot%40nexus-gate-fund-459822.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
