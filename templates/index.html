@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Gate Fund Trading Bot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .status-running { color: #198754; }
+        .status-stopped { color: #dc3545; }
+        .card-header { background-color: #f8f9fa; }
+        .price-positive { color: #198754; }
+        .price-negative { color: #dc3545; }
+        .refresh-btn { border: none; background: transparent; }
+        .last-updated { font-size: 0.8em; color: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4"><i class="fas fa-chart-line"></i> Nexus Gate Fund Trading Bot</h1>
+            </div>
+        </div>
+
+        <!-- Status Row -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-robot"></i> Bot Status</h5>
+                        <span class="badge bg-{{ 'success' if status.running else 'danger' }}">
+                            {{ 'RUNNING' if status.running else 'STOPPED' }}
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Last Run:</strong> {{ status.last_run or 'Never' }}</p>
+                        <p><strong>Next Run:</strong> {{ status.next_run or 'Not scheduled' }}</p>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-success" onclick="startBot()" {{ 'disabled' if status.running }}>
+                                <i class="fas fa-play"></i> Start Bot
+                            </button>
+                            <button class="btn btn-danger" onclick="stopBot()" {{ 'disabled' if not status.running }}>
+                                <i class="fas fa-stop"></i> Stop Bot
+                            </button>
+                            <button class="btn btn-primary" onclick="runNow()">
+                                <i class="fas fa-refresh"></i> Run Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Portfolio Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="portfolio-info">
+                            <p><strong>Cash:</strong> <span id="cash-amount">Loading...</span></p>
+                            <p><strong>Total Value:</strong> <span id="total-value">Loading...</span></p>
+                            <p><strong>Active Positions:</strong> <span id="position-count">Loading...</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Latest Decision -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-brain"></i> Latest Trading Decision</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <h6>Action:</h6>
+                                <span class="badge bg-{{ 'success' if decision.action == 'BUY' else 'danger' if decision.action == 'SELL' else 'secondary' }} fs-6">
+                                    {{ decision.action }}
+                                </span>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>Ticker:</h6>
+                                <strong>{{ decision.ticker.upper() if decision.ticker else 'N/A' }}</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Rationale:</h6>
+                                <p class="mb-0">{{ decision.rationale }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Market Data -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Market Data</h5>
+                        <button class="refresh-btn" onclick="refreshMarketData()" title="Refresh Data">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="market-data" class="row">
+                            <!-- Market data will be populated here -->
+                        </div>
+                        <small class="last-updated">Last updated: <span id="last-updated">Loading...</span></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trading History -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-history"></i> Recent Trading History</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Action</th>
+                                        <th>Ticker</th>
+                                        <th>Rationale</th>
+                                        <th>Portfolio Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-table">
+                                    {% for entry in history %}
+                                    <tr>
+                                        <td>{{ entry.timestamp }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if entry.action == 'BUY' else 'danger' if entry.action == 'SELL' else 'secondary' }}">
+                                                {{ entry.action }}
+                                            </span>
+                                        </td>
+                                        <td><strong>{{ entry.ticker }}</strong></td>
+                                        <td>{{ entry.rationale[:100] }}{% if entry.rationale|length > 100 %}...{% endif %}</td>
+                                        <td>${{ "%.2f"|format(entry.portfolio_value) }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">No trading history available</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh market data every 30 seconds
+        setInterval(refreshMarketData, 30000);
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshMarketData();
+            refreshPortfolio();
+        });
+
+        async function refreshMarketData() {
+            try {
+                const response = await fetch('/api/market-data');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Market data error:', data.error);
+                    return;
+                }
+                
+                const marketDataDiv = document.getElementById('market-data');
+                marketDataDiv.innerHTML = '';
+                
+                Object.entries(data).forEach(([ticker, info]) => {
+                    const changeClass = info.percent_change >= 0 ? 'price-positive' : 'price-negative';
+                    const changeIcon = info.percent_change >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                    
+                    const tickerCard = `
+                        <div class="col-md-3 col-sm-6 mb-3">
+                            <div class="card">
+                                <div class="card-body p-2">
+                                    <h6 class="card-title mb-1">${ticker}</h6>
+                                    <p class="card-text mb-1">
+                                        <strong>$${info.price.toFixed(2)}</strong>
+                                    </p>
+                                    <small class="${changeClass}">
+                                        <i class="fas ${changeIcon}"></i>
+                                        ${info.percent_change.toFixed(2)}%
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    marketDataDiv.innerHTML += tickerCard;
+                });
+                
+                document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Error refreshing market data:', error);
+            }
+        }
+
+        async function refreshPortfolio() {
+            try {
+                const response = await fetch('/api/portfolio');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Portfolio error:', data.error);
+                    return;
+                }
+                
+                document.getElementById('cash-amount').textContent = `$${data.cash.toFixed(2)}`;
+                document.getElementById('total-value').textContent = `$${data.total_value.toFixed(2)}`;
+                document.getElementById('position-count').textContent = data.active_positions;
+            } catch (error) {
+                console.error('Error refreshing portfolio:', error);
+            }
+        }
+
+        async function startBot() {
+            try {
+                const response = await fetch('/api/start-bot', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Failed to start bot: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error starting bot: ' + error.message);
+            }
+        }
+
+        async function stopBot() {
+            try {
+                const response = await fetch('/api/stop-bot', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Failed to stop bot: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error stopping bot: ' + error.message);
+            }
+        }
+
+        async function runNow() {
+            try {
+                const button = event.target.closest('button');
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+                button.disabled = true;
+                
+                const response = await fetch('/api/run-now', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    alert('Failed to run trading cycle: ' + (data.error || 'Unknown error'));
+                }
+                
+                button.innerHTML = originalText;
+                button.disabled = false;
+            } catch (error) {
+                alert('Error running trading cycle: ' + error.message);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

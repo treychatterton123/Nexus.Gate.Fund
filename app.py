@@ -5,7 +5,7 @@ import logging
 import json
 import time
 from datetime import datetime, timedelta
-import main
+import trading_bot
 
 # Configure logging
 logging.basicConfig(
@@ -18,12 +18,6 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "nexus-gate-fund-secret")
 
-# Global variables to store trading data for display
-latest_signals = {}
-latest_decision = {"action": "N/A", "rationale": "N/A"}
-trading_history = []
-bot_status = {"running": False, "last_run": None, "next_run": None}
-
 # Initialize threading event to control the bot
 stop_event = threading.Event()
 bot_thread = None
@@ -32,10 +26,10 @@ bot_thread = None
 def index():
     """Render the main dashboard page"""
     return render_template('index.html', 
-                          signals=latest_signals,
-                          decision=latest_decision,
-                          history=trading_history,
-                          status=bot_status)
+                          signals=trading_bot.latest_signals,
+                          decision=trading_bot.latest_decision,
+                          history=trading_bot.trading_history,
+                          status=trading_bot.bot_status)
 
 # Cache market data in memory with timestamp  
 market_data_cache = {
@@ -53,199 +47,141 @@ def market_data():
     2. Only fetching fresh data from the source API when needed
     3. Tracking request frequency for monitoring
     """
-    global market_data_cache, latest_signals
-    
-    # Increment request counter
-    market_data_cache["request_count"] += 1
-    
-    # Log request count every 100 requests
-    if market_data_cache["request_count"] % 100 == 0:
-        logger.info(f"Market data API has been called {market_data_cache['request_count']} times")
-    
-    # Check if we need to refresh the data (every 1 second max)
-    current_time = time.time()
-    if current_time - market_data_cache["timestamp"] > 1:  # Only refresh if more than 1 second has passed
-        try:
-            # Fetch fresh market data
-            logger.debug("Fetching fresh market data from Finnhub API")
-            fresh_signals = main.get_market_signals()
-            
-            # Debug: Log the structure of the returned data
-            logger.debug(f"Fresh signals received: {len(fresh_signals)} tickers with keys: {list(fresh_signals.keys())[:5]}...")
-            
-            # Only update if we got valid data
-            if fresh_signals and len(fresh_signals) > 0:
-                latest_signals = fresh_signals
-                market_data_cache["timestamp"] = current_time
-                market_data_cache["data"] = fresh_signals
-                logger.debug(f"Market data refreshed with {len(fresh_signals)} tickers")
-            else:
-                logger.warning("Received empty market data from API")
-        except Exception as e:
-            logger.error(f"Error refreshing market data: {str(e)}")
-            # Include stack trace for better debugging
-            import traceback
-            logger.error(f"Stack trace: {traceback.format_exc()}")
-    
-    # Return the most up-to-date market data with additional metadata
-    if latest_signals and len(latest_signals) > 0:
-        # Add metadata to response
-        response_data = {
-            "_meta": {
-                "ticker_count": len(latest_signals),
-                "timestamp": int(market_data_cache["timestamp"]),
-                "cached": current_time - market_data_cache["timestamp"] > 1
-            },
-            **latest_signals  # Include all the ticker data
-        }
-        return jsonify(response_data)
-    else:
-        # If no data is available, return an informative error
-        logger.error("No market data available to return to client")
-        return jsonify({
-            "error": "No market data available. Please try again later.",
-            "_meta": {
-                "timestamp": int(current_time),
-                "reason": "No tickers available from data source"
-            }
-        }), 503
+    try:
+        current_time = time.time()
+        
+        # Check if we have cached data that's less than 1 second old
+        if (current_time - market_data_cache["timestamp"]) < 1:
+            market_data_cache["request_count"] += 1
+            return jsonify({
+                "data": market_data_cache["data"],
+                "cached": True,
+                "cache_age": current_time - market_data_cache["timestamp"],
+                "request_count": market_data_cache["request_count"]
+            })
+        
+        # Fetch fresh data from trading bot module
+        fresh_signals = trading_bot.get_market_signals()
+        
+        # Update cache
+        market_data_cache["timestamp"] = current_time
+        market_data_cache["data"] = fresh_signals
+        market_data_cache["request_count"] += 1
+        
+        return jsonify(fresh_signals)
+        
+    except Exception as e:
+        logger.error(f"Error in market_data endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/decision')
 def decision():
     """API endpoint to get the latest trading decision"""
-    return jsonify(latest_decision)
+    return jsonify(trading_bot.latest_decision)
 
 @app.route('/api/history')
 def history():
     """API endpoint to get trading history"""
-    return jsonify(trading_history)
+    return jsonify(trading_bot.trading_history)
 
 @app.route('/api/status')
 def status():
     """API endpoint to get the bot's status"""
+    return jsonify(trading_bot.bot_status)
+
+@app.route('/api/portfolio')
+def get_portfolio():
+    """API endpoint to get the current portfolio status"""
     try:
-        # Create a safe copy with default values in case of missing keys
-        safe_status = {
-            "running": False,
-            "last_run": None,
-            "next_run": None
-        }
+        signals = trading_bot.get_market_signals()
+        portfolio_value = trading_bot.calculate_portfolio_value(signals)
         
-        # Only copy values if they exist
-        if isinstance(bot_status, dict):
-            if "running" in bot_status and isinstance(bot_status["running"], bool):
-                safe_status["running"] = bot_status["running"]
-            if "last_run" in bot_status:
-                safe_status["last_run"] = bot_status["last_run"]
-            if "next_run" in bot_status:
-                safe_status["next_run"] = bot_status["next_run"]
+        # Count active positions
+        active_positions = sum(1 for pos in trading_bot.portfolio["positions"].values() if pos["shares"] > 0)
         
-        return jsonify(safe_status)
-    except Exception as e:
-        # Log error and return fallback status
-        logger.error(f"Error in /api/status: {str(e)}")
         return jsonify({
-            "running": False,
-            "last_run": None,
-            "next_run": None,
-            "error": "Status API error"
+            "cash": trading_bot.portfolio["cash"],
+            "total_value": portfolio_value,
+            "active_positions": active_positions,
+            "positions": {k: v for k, v in trading_bot.portfolio["positions"].items() if v["shares"] > 0}
         })
+    except Exception as e:
+        logger.error(f"Error getting portfolio: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/run-now', methods=['POST'])
 def run_now():
     """API endpoint to trigger an immediate trading cycle"""
     try:
-        signals, decision, action, rationale = main.run_trading_cycle_api()
+        result = trading_bot.run_trading_cycle_api()
         
-        # Update the global variables
-        global latest_signals, latest_decision
-        latest_signals = signals
-        latest_decision = {"action": action, "rationale": rationale}
+        if "error" in result:
+            return jsonify({"success": False, "error": result["error"]}), 500
         
-        # Add to history
-        trading_history.insert(0, {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "signals": signals,
-            "decision": {"action": action, "rationale": rationale}
-        })
+        return jsonify({"success": True, "result": result})
         
-        # Keep history at a reasonable size
-        if len(trading_history) > 20:
-            trading_history.pop()
-            
-        return jsonify({"success": True, "message": "Trading cycle executed successfully"})
     except Exception as e:
-        logger.error(f"Error running trading cycle: {str(e)}")
-        return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
+        logger.error(f"Error in run_now: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/start-bot', methods=['POST'])
 def start_bot():
     """API endpoint to start the trading bot"""
-    global bot_thread, bot_status
+    global bot_thread, stop_event
     
-    if bot_status["running"]:
-        return jsonify({"success": False, "message": "Bot is already running"}), 400
-    
-    # Reset the stop event
-    stop_event.clear()
-    
-    # Start the bot in a separate thread
-    bot_thread = threading.Thread(target=main.run_bot_thread, args=(stop_event, update_status))
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # Update status
-    bot_status["running"] = True
-    bot_status["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    bot_status["next_run"] = (datetime.now() + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
-    
-    return jsonify({"success": True, "message": "Bot started successfully"})
+    try:
+        if bot_thread and bot_thread.is_alive():
+            return jsonify({"success": False, "error": "Bot is already running"})
+        
+        # Reset stop event and start new thread
+        stop_event.clear()
+        bot_thread = threading.Thread(
+            target=trading_bot.run_bot_thread,
+            args=(stop_event, trading_bot.update_status)
+        )
+        bot_thread.daemon = True
+        bot_thread.start()
+        
+        return jsonify({"success": True, "message": "Bot started successfully"})
+        
+    except Exception as e:
+        logger.error(f"Error starting bot: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/stop-bot', methods=['POST'])
 def stop_bot():
     """API endpoint to stop the trading bot"""
-    global bot_status
+    global bot_thread, stop_event
     
-    if not bot_status["running"]:
-        return jsonify({"success": False, "message": "Bot is not running"}), 400
-    
-    # Set the stop event to signal the bot thread to exit
-    stop_event.set()
-    
-    # Update status
-    bot_status["running"] = False
-    bot_status["next_run"] = None
-    
-    return jsonify({"success": True, "message": "Bot stopped successfully"})
+    try:
+        if not bot_thread or not bot_thread.is_alive():
+            return jsonify({"success": False, "error": "Bot is not running"})
+        
+        # Signal the thread to stop
+        stop_event.set()
+        
+        # Wait for thread to finish (with timeout)
+        bot_thread.join(timeout=5)
+        
+        return jsonify({"success": True, "message": "Bot stopped successfully"})
+        
+    except Exception as e:
+        logger.error(f"Error stopping bot: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/news')
+def news():
+    """API endpoint to get the latest market news"""
+    try:
+        news_headlines = trading_bot.get_news_headlines()
+        return jsonify(news_headlines)
+    except Exception as e:
+        logger.error(f"Error getting news: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 def update_status(signals=None, decision=None, action=None, rationale=None):
     """Callback function to update the bot's status and trading data"""
-    global latest_signals, latest_decision, bot_status, trading_history
-    
-    if signals:
-        latest_signals = signals
-    
-    if action and rationale:
-        latest_decision = {"action": action, "rationale": rationale}
-    
-    # Add to history if we have new data
-    if signals and action and rationale:
-        trading_history.insert(0, {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "signals": signals,
-            "decision": {"action": action, "rationale": rationale}
-        })
-        
-        # Keep history at a reasonable size
-        if len(trading_history) > 20:
-            trading_history.pop()
-    
-    # Update status timestamps
-    bot_status["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if bot_status["running"]:
-        bot_status["next_run"] = (datetime.now() + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+    trading_bot.update_status(signals, decision, action, rationale)
 
-# Import models after app is created to avoid circular imports
-if __name__ == "__main__":
-    # Start the Flask app
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
