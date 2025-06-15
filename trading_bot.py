@@ -87,6 +87,10 @@ TRACKED_TICKERS = list(portfolio["positions"].keys())
 def init_sheet():
     """Initialize and return Google Sheet connection"""
     try:
+        if not os.path.exists(CREDENTIALS_FILE):
+            logger.warning(f"Google credentials file not found: {CREDENTIALS_FILE}")
+            return None
+            
         scope = ['https://spreadsheets.google.com/feeds',
                 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
@@ -413,9 +417,10 @@ def log_to_sheet(sheet, timestamp, signals, action, rationale):
         for ticker in TRACKED_TICKERS:
             ticker_upper = ticker.upper()
             if ticker_upper in signals:
+                signal_data = signals[ticker_upper]
                 market_data_summary[ticker_upper] = {
-                    "price": signals[ticker_upper].get("price", 0),
-                    "change_percent": signals[ticker_upper].get("percent_change", 0)
+                    "price": signal_data.get("price", 0) if isinstance(signal_data, dict) else 0,
+                    "change_percent": signal_data.get("percent_change", 0) if isinstance(signal_data, dict) else 0
                 }
         
         # Calculate portfolio value
@@ -519,11 +524,12 @@ def run_bot_thread(stop_event, update_callback=None):
             
             # Call update callback if provided
             if update_callback and "error" not in result:
+                decision_data = result.get("decision", {})
                 update_callback(
                     signals=result.get("signals"),
-                    decision=result.get("decision"),
-                    action=result.get("decision", {}).get("action"),
-                    rationale=result.get("decision", {}).get("rationale")
+                    decision=decision_data,
+                    action=decision_data.get("action") if isinstance(decision_data, dict) else None,
+                    rationale=decision_data.get("rationale") if isinstance(decision_data, dict) else None
                 )
             
             # Calculate next run time (5 minutes from now)
