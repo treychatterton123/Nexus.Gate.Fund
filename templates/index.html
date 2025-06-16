@@ -7,163 +7,265 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        .status-running { color: #198754; }
-        .status-stopped { color: #dc3545; }
-        .card-header { background-color: #f8f9fa; }
-        .price-positive { color: #198754; }
-        .price-negative { color: #dc3545; }
-        .refresh-btn { border: none; background: transparent; }
-        .last-updated { font-size: 0.8em; color: #6c757d; }
+        body {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .section-title {
+            color: #ecf0f1;
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #34495e;
+            padding-bottom: 8px;
+        }
+        
+        .ticker-grid {
+            display: grid;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .core-volatility { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        .big-tech { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        .financials { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        .energy { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        
+        .ticker-card {
+            background-color: #34495e;
+            border: 1px solid #4a5f7a;
+            border-radius: 8px;
+            padding: 12px;
+            transition: all 0.3s ease;
+            position: relative;
+            min-height: 100px;
+        }
+        
+        .ticker-card:hover {
+            border-color: #5d7096;
+            transform: translateY(-2px);
+        }
+        
+        .ticker-card.highlighted {
+            border-color: #f39c12;
+            box-shadow: 0 0 10px rgba(243, 156, 18, 0.3);
+        }
+        
+        .ticker-symbol {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #bdc3c7;
+            margin-bottom: 2px;
+        }
+        
+        .ticker-change {
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        
+        .ticker-price {
+            font-size: 1.4rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+        
+        .ticker-index {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #95a5a6;
+            margin-bottom: 2px;
+        }
+        
+        .ticker-description {
+            font-size: 0.7rem;
+            color: #7f8c8d;
+            line-height: 1.2;
+        }
+        
+        .positive {
+            color: #27ae60;
+        }
+        
+        .negative {
+            color: #e74c3c;
+        }
+        
+        .control-panel {
+            background-color: #34495e;
+            border: 1px solid #4a5f7a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .btn-custom {
+            background-color: #3498db;
+            border-color: #3498db;
+            color: white;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn-custom:hover {
+            background-color: #2980b9;
+            border-color: #2980b9;
+        }
+        
+        .btn-success-custom {
+            background-color: #27ae60;
+            border-color: #27ae60;
+        }
+        
+        .btn-success-custom:hover {
+            background-color: #229954;
+        }
+        
+        .btn-danger-custom {
+            background-color: #e74c3c;
+            border-color: #e74c3c;
+        }
+        
+        .btn-danger-custom:hover {
+            background-color: #c0392b;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-running {
+            background-color: #27ae60;
+        }
+        
+        .status-stopped {
+            background-color: #e74c3c;
+        }
     </style>
 </head>
 <body>
-    <div class="container-fluid py-4">
-        <div class="row">
-            <div class="col-12">
-                <h1 class="mb-4"><i class="fas fa-chart-line"></i> Nexus Gate Fund Trading Bot</h1>
-            </div>
-        </div>
-
-        <!-- Status Row -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-robot"></i> Bot Status</h5>
-                        <span class="badge bg-{{ 'success' if status.running else 'danger' }}">
-                            {{ 'RUNNING' if status.running else 'STOPPED' }}
-                        </span>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Last Run:</strong> {{ status.last_run or 'Never' }}</p>
-                        <p><strong>Next Run:</strong> {{ status.next_run or 'Not scheduled' }}</p>
-                        <div class="btn-group" role="group">
-                            <button class="btn btn-success" onclick="startBot()" {{ 'disabled' if status.running }}>
-                                <i class="fas fa-play"></i> Start Bot
-                            </button>
-                            <button class="btn btn-danger" onclick="stopBot()" {{ 'disabled' if not status.running }}>
-                                <i class="fas fa-stop"></i> Stop Bot
-                            </button>
-                            <button class="btn btn-primary" onclick="runNow()">
-                                <i class="fas fa-refresh"></i> Run Now
-                            </button>
-                        </div>
-                    </div>
+    <div class="main-container">
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0">
+                    <span class="status-indicator {{ 'status-running' if status.running else 'status-stopped' }}"></span>
+                    Trading Bot {{ 'RUNNING' if status.running else 'STOPPED' }}
+                </h4>
+                <div>
+                    <button class="btn btn-success-custom btn-sm" onclick="startBot()" {{ 'disabled' if status.running }}>
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                    <button class="btn btn-danger-custom btn-sm" onclick="stopBot()" {{ 'disabled' if not status.running }}>
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                    <button class="btn btn-custom btn-sm" onclick="runNow()">
+                        <i class="fas fa-refresh"></i> Run Now
+                    </button>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Portfolio Status</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="portfolio-info">
-                            <p><strong>Cash:</strong> <span id="cash-amount">Loading...</span></p>
-                            <p><strong>Total Value:</strong> <span id="total-value">Loading...</span></p>
-                            <p><strong>Active Positions:</strong> <span id="position-count">Loading...</span></p>
-                        </div>
-                    </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <small class="text-muted">Last Run:</small><br>
+                    <span>{{ status.last_run or 'Never' }}</span>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Portfolio Value:</small><br>
+                    <span id="total-value">Loading...</span>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Cash Available:</small><br>
+                    <span id="cash-amount">Loading...</span>
                 </div>
             </div>
         </div>
 
-        <!-- Latest Decision -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-brain"></i> Latest Trading Decision</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <h6>Action:</h6>
-                                <span class="badge bg-{{ 'success' if decision.action == 'BUY' else 'danger' if decision.action == 'SELL' else 'secondary' }} fs-6">
-                                    {{ decision.action }}
-                                </span>
-                            </div>
-                            <div class="col-md-3">
-                                <h6>Ticker:</h6>
-                                <strong>{{ decision.ticker.upper() if decision.ticker else 'N/A' }}</strong>
-                            </div>
-                            <div class="col-md-6">
-                                <h6>Rationale:</h6>
-                                <p class="mb-0">{{ decision.rationale }}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- Core Index & Volatility -->
+        <div class="section-title">Core Index & Volatility</div>
+        <div class="ticker-grid core-volatility" id="core-volatility-grid">
+            <!-- Core index and volatility tickers will be populated here -->
         </div>
 
-        <!-- Market Data -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Market Data</h5>
-                        <button class="refresh-btn" onclick="refreshMarketData()" title="Refresh Data">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div id="market-data" class="row">
-                            <!-- Market data will be populated here -->
-                        </div>
-                        <small class="last-updated">Last updated: <span id="last-updated">Loading...</span></small>
-                    </div>
-                </div>
-            </div>
+        <!-- Big Tech -->
+        <div class="section-title">Big Tech</div>
+        <div class="ticker-grid big-tech" id="big-tech-grid">
+            <!-- Big tech tickers will be populated here -->
         </div>
 
-        <!-- Trading History -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-history"></i> Recent Trading History</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Timestamp</th>
-                                        <th>Action</th>
-                                        <th>Ticker</th>
-                                        <th>Rationale</th>
-                                        <th>Portfolio Value</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="history-table">
-                                    {% for entry in history %}
-                                    <tr>
-                                        <td>{{ entry.timestamp }}</td>
-                                        <td>
-                                            <span class="badge bg-{{ 'success' if entry.action == 'BUY' else 'danger' if entry.action == 'SELL' else 'secondary' }}">
-                                                {{ entry.action }}
-                                            </span>
-                                        </td>
-                                        <td><strong>{{ entry.ticker }}</strong></td>
-                                        <td>{{ entry.rationale[:100] }}{% if entry.rationale|length > 100 %}...{% endif %}</td>
-                                        <td>${{ "%.2f"|format(entry.portfolio_value) }}</td>
-                                    </tr>
-                                    {% else %}
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted">No trading history available</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- Financials & ETFs -->
+        <div class="section-title">Financials & ETFs</div>
+        <div class="ticker-grid financials" id="financials-grid">
+            <!-- Financial tickers will be populated here -->
+        </div>
+
+        <!-- Energy & Commodities -->
+        <div class="section-title">Energy & Commodities</div>
+        <div class="ticker-grid energy" id="energy-grid">
+            <!-- Energy and commodity tickers will be populated here -->
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Define ticker categories to match the UI sections
+        const tickerCategories = {
+            'core-volatility': {
+                tickers: ['spy', 'qqq', 'dia', 'iwm', 'vixy', 'uvxy'],
+                descriptions: {
+                    'spy': 'S&P 500',
+                    'qqq': 'Nasdaq 100',
+                    'dia': 'Dow Jones',
+                    'iwm': 'Russell 2000',
+                    'vixy': 'VIX Short-Term',
+                    'uvxy': '1.5x VIX'
+                }
+            },
+            'big-tech': {
+                tickers: ['aapl', 'msft', 'nvda', 'amzn', 'googl', 'tsla', 'meta'],
+                descriptions: {
+                    'aapl': 'Apple',
+                    'msft': 'Microsoft',
+                    'nvda': 'NVIDIA',
+                    'amzn': 'Amazon',
+                    'googl': 'Alphabet',
+                    'tsla': 'Tesla',
+                    'meta': 'Meta'
+                }
+            },
+            'financials': {
+                tickers: ['xlf', 'jpm', 'bac', 'v', 'ma'],
+                descriptions: {
+                    'xlf': 'Financials ETF',
+                    'jpm': 'JPMorgan',
+                    'bac': 'Bank of America',
+                    'v': 'Visa',
+                    'ma': 'Mastercard'
+                }
+            },
+            'energy': {
+                tickers: ['gld', 'slv', 'uso', 'xle'],
+                descriptions: {
+                    'gld': 'Gold',
+                    'slv': 'Silver',
+                    'uso': 'US Oil',
+                    'xle': 'Energy'
+                }
+            }
+        };
+
         // Auto-refresh market data every 30 seconds
         setInterval(refreshMarketData, 30000);
         
@@ -172,6 +274,25 @@
             refreshMarketData();
             refreshPortfolio();
         });
+
+        function createTickerCard(ticker, data, description) {
+            const price = data.c || 100;
+            const change = data.d || 0;
+            const changePercent = data.dp || 0;
+            const isPositive = changePercent >= 0;
+            const changeClass = isPositive ? 'positive' : 'negative';
+            const changeSign = isPositive ? '+' : '';
+            
+            return `
+                <div class="ticker-card" data-ticker="${ticker}">
+                    <div class="ticker-symbol">${ticker.toUpperCase()}${changeSign}${changePercent.toFixed(2)}%</div>
+                    <div class="ticker-change ${changeClass}">${changeSign}${changePercent.toFixed(2)}%</div>
+                    <div class="ticker-price">${price.toFixed(2)}</div>
+                    <div class="ticker-index">${Math.round(price)}</div>
+                    <div class="ticker-description">${description}</div>
+                </div>
+            `;
+        }
 
         async function refreshMarketData() {
             try {
@@ -183,33 +304,21 @@
                     return;
                 }
                 
-                const marketDataDiv = document.getElementById('market-data');
-                marketDataDiv.innerHTML = '';
-                
-                Object.entries(data).forEach(([ticker, info]) => {
-                    const changeClass = info.percent_change >= 0 ? 'price-positive' : 'price-negative';
-                    const changeIcon = info.percent_change >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
-                    
-                    const tickerCard = `
-                        <div class="col-md-3 col-sm-6 mb-3">
-                            <div class="card">
-                                <div class="card-body p-2">
-                                    <h6 class="card-title mb-1">${ticker}</h6>
-                                    <p class="card-text mb-1">
-                                        <strong>$${info.price.toFixed(2)}</strong>
-                                    </p>
-                                    <small class="${changeClass}">
-                                        <i class="fas ${changeIcon}"></i>
-                                        ${info.percent_change.toFixed(2)}%
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    marketDataDiv.innerHTML += tickerCard;
+                // Populate each category section
+                Object.entries(tickerCategories).forEach(([categoryId, category]) => {
+                    const gridElement = document.getElementById(`${categoryId}-grid`);
+                    if (gridElement) {
+                        gridElement.innerHTML = '';
+                        
+                        category.tickers.forEach(ticker => {
+                            const tickerData = data[ticker] || { c: 100, d: 0, dp: 0 };
+                            const description = category.descriptions[ticker] || ticker.toUpperCase();
+                            const cardHTML = createTickerCard(ticker, tickerData, description);
+                            gridElement.innerHTML += cardHTML;
+                        });
+                    }
                 });
                 
-                document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
             } catch (error) {
                 console.error('Error refreshing market data:', error);
             }
