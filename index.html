@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Gate Fund - Trading Dashboard</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <style>
+        .trading-card {
+            border-left: 4px solid var(--bs-primary);
+            transition: all 0.3s ease;
+        }
+        .trading-card.buy {
+            border-left-color: var(--bs-success);
+        }
+        .trading-card.sell {
+            border-left-color: var(--bs-danger);
+        }
+        .trading-card.hold {
+            border-left-color: var(--bs-info);
+        }
+        .signal-badge {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .history-item {
+            border-left: 3px solid var(--bs-secondary);
+            transition: all 0.3s ease;
+        }
+        .history-item.buy {
+            border-left-color: var(--bs-success);
+        }
+        .history-item.sell {
+            border-left-color: var(--bs-danger);
+        }
+        .history-item.hold {
+            border-left-color: var(--bs-info);
+        }
+        #bot-status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            background-color: var(--bs-danger);
+        }
+        #bot-status-indicator.active {
+            background-color: var(--bs-success);
+        }
+        .ticker-card {
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            font-size: 0.85rem;
+        }
+        .ticker-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .ticker-card.priority {
+            border: 2px solid var(--bs-warning);
+        }
+
+        /* Subtle price animation styles with reduced flickering */
+        @keyframes flashGreen {
+            0% { background-color: transparent; }
+            30% { background-color: rgba(25, 135, 84, 0.15); }
+            100% { background-color: transparent; }
+        }
+
+        @keyframes flashRed {
+            0% { background-color: transparent; }
+            30% { background-color: rgba(220, 53, 69, 0.15); }
+            100% { background-color: transparent; }
+        }
+
+        .flash-green {
+            animation: flashGreen 0.6s ease-out;
+            animation-fill-mode: forwards;
+            will-change: background-color;
+        }
+
+        .flash-red {
+            animation: flashRed 0.6s ease-out;
+            animation-fill-mode: forwards;
+            will-change: background-color;
+        }
+
+        /* Make price numbers monospace for better alignment during updates */
+        .ticker-price {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            transition: color 0.2s ease;
+        }
+
+        .ticker-change {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            transition: all 0.2s ease;
+        }
+
+        .ticker-change.positive {
+            color: var(--bs-success);
+        }
+
+        .ticker-change.negative {
+            color: var(--bs-danger);
+        }
+        .category-header {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 12px 0 8px 0;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--bs-gray-700);
+        }
+        .percent-change {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .percent-change.positive {
+            color: var(--bs-success);
+        }
+        .percent-change.negative {
+            color: var(--bs-danger);
+        }
+
+        /* Toast styling for error messages */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+
+        .error-toast {
+            background-color: rgba(220, 53, 69, 0.9);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            margin-bottom: 10px;
+            animation: fadeInOut 5s forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast container for error messages -->
+    <div id="toast-container" class="toast-container"></div>
+    <div class="container py-4">
+        <header class="pb-3 mb-4 border-bottom">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <h1 class="fs-4">Nexus Gate Fund</h1>
+                    <p class="text-muted mb-0">AI-Powered Trading Dashboard</p>
+                </div>
+                <div class="text-end">
+                    <span id="bot-status" class="me-2">
+                        <span id="bot-status-indicator"></span>
+                        <span id="bot-status-text">Stopped</span>
+                    </span>
+                    <button id="start-bot-btn" class="btn btn-sm btn-outline-success">Start Bot</button>
+                    <button id="stop-bot-btn" class="btn btn-sm btn-outline-danger d-none">Stop Bot</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">Market Data (30 Tickers)</h5>
+                        <span class="badge bg-info">Auto-refresh: 45s</span>
+                    </div>
+                    <div class="card-body">
+                        <!-- Core Index & Volatility Category -->
+                        <div class="category-header">Core Index & Volatility</div>
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">SPY</h6>
+                                            <span id="spy-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="spy-price" class="mb-0">--</h5>
+                                        <small class="text-muted">S&P 500</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">QQQ</h6>
+                                            <span id="qqq-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="qqq-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Nasdaq 100</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">DIA</h6>
+                                            <span id="dia-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="dia-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Dow Jones</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">IWM</h6>
+                                            <span id="iwm-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="iwm-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Russell 2000</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">VIXY</h6>
+                                            <span id="vixy-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="vixy-price" class="mb-0">--</h5>
+                                        <small class="text-muted">VIX Short-Term</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">UVXY</h6>
+                                            <span id="uvxy-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="uvxy-price" class="mb-0">--</h5>
+                                        <small class="text-muted">1.5x VIX</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Big Tech Category -->
+                        <div class="category-header">Big Tech</div>
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">AAPL</h6>
+                                            <span id="aapl-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="aapl-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Apple</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">MSFT</h6>
+                                            <span id="msft-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="msft-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Microsoft</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">NVDA</h6>
+                                            <span id="nvda-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="nvda-price" class="mb-0">--</h5>
+                                        <small class="text-muted">NVIDIA</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">AMZN</h6>
+                                            <span id="amzn-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="amzn-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Amazon</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">GOOGL</h6>
+                                            <span id="googl-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="googl-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Alphabet</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">TSLA</h6>
+                                            <span id="tsla-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="tsla-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Tesla</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">META</h6>
+                                            <span id="meta-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="meta-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Meta</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Financials & ETFs Category -->
+                        <div class="category-header">Financials & ETFs</div>
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">XLF</h6>
+                                            <span id="xlf-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="xlf-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Financials ETF</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">JPM</h6>
+                                            <span id="jpm-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="jpm-price" class="mb-0">--</h5>
+                                        <small class="text-muted">JPMorgan</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">BAC</h6>
+                                            <span id="bac-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="bac-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Bank of America</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">V</h6>
+                                            <span id="v-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="v-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Visa</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">MA</h6>
+                                            <span id="ma-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="ma-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Mastercard</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Energy & Commodities Category -->
+                        <div class="category-header">Energy & Commodities</div>
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">GLD</h6>
+                                            <span id="gld-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="gld-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Gold ETF</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">SLV</h6>
+                                            <span id="slv-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="slv-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Silver ETF</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">USO</h6>
+                                            <span id="uso-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="uso-price" class="mb-0">--</h5>
+                                        <small class="text-muted">US Oil Fund</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">XLE</h6>
+                                            <span id="xle-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="xle-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Energy Sector</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Leverage ETFs Category -->
+                        <div class="category-header">Leverage ETFs</div>
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">TQQQ</h6>
+                                            <span id="tqqq-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="tqqq-price" class="mb-0">--</h5>
+                                        <small class="text-muted">3x Nasdaq Bull</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">SQQQ</h6>
+                                            <span id="sqqq-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="sqqq-price" class="mb-0">--</h5>
+                                        <small class="text-muted">3x Nasdaq Bear</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">SOXL</h6>
+                                            <span id="soxl-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="soxl-price" class="mb-0">--</h5>
+                                        <small class="text-muted">3x Semis Bull</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">SOXS</h6>
+                                            <span id="soxs-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="soxs-price" class="mb-0">--</h5>
+                                        <small class="text-muted">3x Semis Bear</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Healthcare & Defensive Category -->
+                        <div class="category-header">Healthcare & Defensive</div>
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">UNH</h6>
+                                            <span id="unh-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="unh-price" class="mb-0">--</h5>
+                                        <small class="text-muted">UnitedHealth</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">JNJ</h6>
+                                            <span id="jnj-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="jnj-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Johnson & Johnson</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">PFE</h6>
+                                            <span id="pfe-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="pfe-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Pfizer</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <div class="card ticker-card h-100">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">XLU</h6>
+                                            <span id="xlu-change" class="percent-change">--</span>
+                                        </div>
+                                        <h5 id="xlu-price" class="mb-0">--</h5>
+                                        <small class="text-muted">Utilities ETF</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Latest Market News</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="news-container" class="list-group list-group-flush">
+                            <div class="list-group-item text-center text-muted py-3">
+                                No news available yet
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div id="decision-card" class="card trading-card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Latest Trading Decision</h5>
+                    </div>
+                    <div class="card-body">
+                        <h3 id="decision-action" class="mb-3">--</h3>
+                        <p id="decision-rationale" class="mb-2">--</p>
+                        <small id="decision-time" class="text-muted">--</small>
+                    </div>
+                    <div class="card-footer">
+                        <button id="run-now-btn" class="btn btn-primary w-100 mb-2">Generate New Decision</button>
+                        <button id="log-daily-btn" class="btn btn-outline-info w-100">Log Daily Portfolio Value</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Portfolio Growth Tracking Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Portfolio Growth Tracking - Journey to $100,000</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-success text-white">
+                                    <div class="card-body text-center py-2">
+                                        <h6 class="card-subtitle mb-1">Current Value</h6>
+                                        <h4 id="growth-current-value" class="mb-0">$10,000</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-warning text-dark">
+                                    <div class="card-body text-center py-2">
+                                        <h6 class="card-subtitle mb-1">Target Value</h6>
+                                        <h4 id="growth-target-value" class="mb-0">$100,000</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-info text-white">
+                                    <div class="card-body text-center py-2">
+                                        <h6 class="card-subtitle mb-1">Total Return</h6>
+                                        <h4 id="growth-total-return" class="mb-0">$0</h4>
+                                        <small id="growth-return-percentage" class="text-light">(0%)</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <div class="card bg-primary text-white">
+                                    <div class="card-body text-center py-2">
+                                        <h6 class="card-subtitle mb-1">Progress</h6>
+                                        <h4 id="growth-progress-percentage" class="mb-0">10%</h4>
+                                        <small id="growth-remaining-amount" class="text-light">$90,000 to go</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <div class="progress" style="height: 20px;">
+                                    <div id="growth-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                                         role="progressbar" style="width: 10%" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100">
+                                        10% Complete
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Performance Metrics -->
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <div class="border rounded p-2">
+                                    <h6 class="mb-1">Days Active</h6>
+                                    <span id="growth-days-active">0</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <div class="border rounded p-2">
+                                    <h6 class="mb-1">Avg Daily Return</h6>
+                                    <span id="growth-avg-daily-return">0%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <div class="border rounded p-2">
+                                    <h6 class="mb-1">Projected Days to Target</h6>
+                                    <span id="growth-projected-days">Calculating...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Trading Performance -->
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <h6>Trading Performance</h6>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">Total Trades</small><br>
+                                        <span id="growth-total-trades">0</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Win Rate</small><br>
+                                        <span id="growth-win-rate">0%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Best/Worst Trades</h6>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted text-success">Best Trade</small><br>
+                                        <span id="growth-best-trade">--</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted text-danger">Worst Trade</small><br>
+                                        <span id="growth-worst-trade">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Portfolio Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4 mb-3">
+                                <div class="card text-white bg-primary">
+                                    <div class="card-body py-2 text-center">
+                                        <h6 class="card-subtitle mb-1">Cash</h6>
+                                        <h4 id="cash-balance" class="mb-0">$10,000.00</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="card text-white bg-info">
+                                    <div class="card-body py-2 text-center">
+                                        <h6 class="card-subtitle mb-1">Positions</h6>
+                                        <h4 id="position-value" class="mb-0">$0.00</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="card text-white bg-success">
+                                    <div class="card-body py-2 text-center">
+                                        <h6 class="card-subtitle mb-1">Total Value</h6>
+                                        <h4 id="total-value" class="mb-0">$10,000.00</h4>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 class="mb-3">Current Holdings</h6>
+                        <div id="holdings-container">
+                            <p class="text-center text-muted">No positions currently open</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Trading History</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="history-container" class="list-group list-group-flush">
+                            <div class="list-group-item text-center text-muted py-5">
+                                No trading history available yet
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Status & Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Last Run:</strong> <span id="last-run-time">--</span></p>
+                        <p><strong>Next Run:</strong> <span id="next-run-time">--</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>API Status:</strong>
+                            <span id="api-status" class="badge bg-success">Connected</span>
+                        </p>
+                        <p><strong>Google Sheets:</strong>
+                            <span id="sheets-status" class="badge bg-success">Connected</span>
+                        </p>
+                        <p><strong>Spreadsheet:</strong>
+                            <span id="spreadsheet-name">Nexus Gate Fund Trading Logs</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function updateLastUpdateTime() {
+          const lastUpdateTimestamp = document.getElementById('last-update-timestamp');
+          if (lastUpdateTimestamp) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            lastUpdateTimestamp.textContent = Last updated: ${timeString};
+          }
+        }// Function to show error toast messages
+        function showErrorToast(message) {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'error-toast';
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+
+            // Remove the toast after animation completes
+            setTimeout(() => {
+                if (toast && toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 5000);
+        }
+
+        // DOM Elements
+        const startBotBtn = document.getElementById('start-bot-btn');
+        const stopBotBtn = document.getElementById('stop-bot-btn');
+        const runNowBtn = document.getElementById('run-now-btn');
+        // Refresh button removed in favor of automatic 45-second refresh
+        const botStatusIndicator = document.getElementById('bot-status-indicator');
+        const botStatusText = document.getElementById('bot-status-text');
+        const decisionCard = document.getElementById('decision-card');
+        const historyContainer = document.getElementById('history-container');
+        const newsContainer = document.getElementById('news-container');
+        const holdingsContainer = document.getElementById('holdings-container');
+
+        // Define all ticker symbols by category
+        const tickerCategories = {
+            'core': ['spy', 'qqq', 'dia', 'iwm', 'vixy', 'uvxy'],
+            'tech': ['aapl', 'msft', 'nvda', 'amzn', 'googl', 'tsla', 'meta'],
+            'financial': ['xlf', 'jpm', 'bac', 'v', 'ma'],
+            'commodity': ['gld', 'slv', 'uso', 'xle'],
+            'leveraged': ['tqqq', 'sqqq', 'soxl', 'soxs'],
+            'healthcare': ['unh', 'jnj', 'pfe', 'xlu']
+        };
+
+        // Flatten to single list of all tickers
+        const allTickers = Object.values(tickerCategories).flat();
+
+        // Create references to price and change elements for all tickers
+        const tickerElements = {};
+
+        console.log('All tickers to initialize:', allTickers);
+
+        allTickers.forEach(ticker => {
+            const priceElement = document.getElementById(${ticker}-price);
+            const changeElement = document.getElementById(${ticker}-change);
+
+            // Log if elements are missing
+            if (!priceElement) {
+                console.warn(Price element not found for ticker: ${ticker});
+            }
+            if (!changeElement) {
+                console.warn(Change element not found for ticker: ${ticker});
+            }
+
+            tickerElements[ticker] = {
+                price: priceElement,
+                change: changeElement
+            };
+        });
+
+        console.log('Initialized ticker elements:', tickerElements);
+
+        // Portfolio elements
+        const cashBalance = document.getElementById('cash-balance');
+        const positionValue = document.getElementById('position-value');
+        const totalValue = document.getElementById('total-value');
+
+        // Decision elements
+        const decisionAction = document.getElementById('decision-action');
+        const decisionRationale = document.getElementById('decision-rationale');
+        const decisionTime = document.getElementById('decision-time');
+
+        // Status elements
+        const lastRunTime = document.getElementById('last-run-time');
+        const nextRunTime = document.getElementById('next-run-time');
+        const apiStatus = document.getElementById('api-status');
+        const sheetsStatus = document.getElementById('sheets-status');
+        const spreadsheetName = document.getElementById('spreadsheet-name');
+
+        // Global portfolio state
+        let portfolio = {
+            cash: 10000.0,
+            positions: {},
+            portfolio_value: 10000.0
+        };
+
+        // Cache and optimization variables
+        let lastMarketDataUpdate = 0;
+        let marketDataCache = null;
+        let priorityUpdateCounter = 0;
+        let batchUpdateTimerId = null;
+        let pendingUpdates = new Map(); // Stores pending updates to batch process
+
+        // Improved market data update with synchronized 45-second updates for all 30 tickers
+        function updateMarketData() {
+            const now = Date.now();
+            const fetchOptions = { 
+                // Cache busting and performance options
+                cache: "no-store",
+            };
+
+            // Avoid multiple concurrent requests
+            if (batchUpdateTimerId) {
+                clearTimeout(batchUpdateTimerId);
+                batchUpdateTimerId = null;
+            }
+
+            // Single API call to get all 30 ticker prices at once
+            fetch('/api/market-data', fetchOptions)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(HTTP error: ${response.status});
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Log the data for debugging
+                    console.log('Market data received:', data);
+
+                    // Check if there's an error message in the response
+                    if (data.error) {
+                        console.error('Error from server:', data.error);
+                        throw new Error(data.error);
+                    }
+
+                    // Extract metadata if available
+                    const metadata = data._meta || {}; 
+                    delete data._meta; // Remove metadata so it doesn't interfere with ticker processing
+
+                    console.log('Market data metadata:', metadata);
+                    console.log('Number of tickers received:', Object.keys(data).length);
+
+                    // Update API connection status (only if changed)
+                    if (apiStatus.className !== 'badge bg-success') {
+                        apiStatus.className = 'badge bg-success';
+                        apiStatus.textContent = 'Connected';
+                    }
+
+                    // Store current timestamp of successful update
+                    lastMarketDataUpdate = now;
+
+                    // Update the timestamp in the footer
+                    lastMarketDataRefreshTime = now;
+                    updateLastUpdateTime();
+
+                    // Only proceed when we have data for all tickers
+                    if (data && Object.keys(data).length > 0) {
+                        // First collect all the ticker data in memory before touching the DOM
+                        const updatedTickers = {};
+
+                        // Debug: log received data structure
+                        console.log('Data keys available:', Object.keys(data));
+
+                        // Track successful and missing tickers for debugging
+                        const missingTickers = [];
+                        const processedTickers = [];
+
+                        allTickers.forEach(ticker => {
+                            // Ensure we search with lowercase ticker symbols since API returns lowercase keys
+                            const tickerKey = ticker.toLowerCase();
+
+                            if (data[tickerKey] && data[tickerKey].c && data[tickerKey].c !== 'N/A') {
+                                updatedTickers[ticker] = {
+                                    price: parseFloat(data[tickerKey].c),
+                                    change: data[tickerKey].dp ? parseFloat(data[tickerKey].dp) : 0
+                                };
+                                processedTickers.push(ticker);
+                            } else {
+                                console.warn(No valid data for ticker: ${ticker} (key: ${tickerKey}));
+                                missingTickers.push(ticker);
+                            }
+                        });
+
+                        // Comprehensive logging for debugging
+                        console.log(Successfully processed ${processedTickers.length} tickers);
+                        if (missingTickers.length > 0) {
+                            console.warn(Missing data for ${missingTickers.length} tickers: ${missingTickers.join(', ')});
+                        }
+
+                        // Now update the DOM all at once in a single animation frame
+                        // This prevents partial updates and flickering
+                        requestAnimationFrame(() => {
+                            // 1. First pass: calculate all changes but don't modify DOM yet
+                            Object.keys(updatedTickers).forEach(ticker => {
+                                const elements = tickerElements[ticker];
+                                if (!elements || !elements.price || !elements.change) return;
+
+                                const newPrice = updatedTickers[ticker].price;
+                                const previousPrice = elements.price.dataset.price ? 
+                                    parseFloat(elements.price.dataset.price) : null;
+
+                                // Store whether we need to apply visual indication of change
+                                if (previousPrice !== null) {
+                                    updatedTickers[ticker].changed = Math.abs(previousPrice - newPrice) >= 0.001;
+                                    updatedTickers[ticker].increased = newPrice > previousPrice;
+                                    updatedTickers[ticker].decreased = newPrice < previousPrice;
+                                }
+                            });
+
+                            // 2. Second pass: update all DOM elements simultaneously
+                            Object.keys(updatedTickers).forEach(ticker => {
+                                const elements = tickerElements[ticker];
+                                if (!elements || !elements.price || !elements.change) return;
+
+                                const tickerUpdate = updatedTickers[ticker];
+                                const newPrice = tickerUpdate.price;
+
+                                // Update price value in dataset and display
+                                elements.price.dataset.price = newPrice.toFixed(2);
+                                elements.price.textContent = newPrice.toFixed(2);
+
+                                // Update percent change
+                                if (elements.change && tickerUpdate.change !== undefined) {
+                                    const changeText = tickerUpdate.change > 0 ? 
+                                        +${tickerUpdate.change.toFixed(2)}% : 
+                                        ${tickerUpdate.change.toFixed(2)}%;
+
+                                    elements.change.textContent = changeText;
+
+                                    // Update color class based on positive/negative change
+                                    elements.change.className = tickerUpdate.change >= 0 ? 
+                                        'change positive' : 'change negative';
+                                }
+
+                                // Apply flash animation for price changes
+                                if (tickerUpdate.changed) {
+                                    // Remove any existing animation classes
+                                    elements.price.classList.remove('flash-green', 'flash-red');
+
+                                    // Add appropriate animation class based on price movement
+                                    if (tickerUpdate.increased) {
+                                        elements.price.classList.add('flash-green');
+                                    } else if (tickerUpdate.decreased) {
+                                        elements.price.classList.add('flash-red');
+                                    }
+
+                                    // Set timer to remove animation class after it completes
+                                    setTimeout(() => {
+                                        if (elements.price) {
+                                            elements.price.classList.remove('flash-green', 'flash-red');
+                                        }
+                                    }, 600);
+                                }
+                            });
+
+                            // 3. Update priority highlighting and portfolio display
+                            priorityUpdateCounter++;
+                            if (priorityUpdateCounter >= 5) {
+                                // Reset all priority highlights
+                                document.querySelectorAll('.ticker-card.priority').forEach(card => {
+                                    card.classList.remove('priority');
+                                });
+
+                                // Highlight top 5 tickers with highest activity
+                                highlightTopTickers(data, 5);
+
+                                priorityUpdateCounter = 0;
+
+                                // Update portfolio values
+                                updatePortfolioDisplay(data);
+                            }
+                        });
+
+                        // Update cache for fallback
+                        marketDataCache = data;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching market data:', error);
+
+                    // Only change status if we haven't had a successful update in the last 10 seconds
+                    if (now - lastMarketDataUpdate > 10000) {
+                        apiStatus.className = 'badge bg-danger';
+                        apiStatus.textContent = 'Disconnected';
+
+                        // Display error toast message
+                        showErrorToast('Live market data temporarily unavailable');
+                    }
+
+                    // Use cached data if available
+                    if (marketDataCache && Object.keys(marketDataCache).length > 0) {
+                        // Use a requestAnimationFrame for better performance
+                        requestAnimationFrame(() => {
+                            allTickers.forEach(ticker => {
+                                updateTickerDisplay(marketDataCache, ticker);
+                            });
+                        });
+                    } else {
+                        // If no data is available at all, show message in each ticker card
+                        document.querySelectorAll('.ticker-price').forEach(element => {
+                            element.textContent = '--';
+                        });
+                        document.querySelectorAll('.change').forEach(element => {
+                            element.textContent = '--';
+                            element.className = 'change';
+                        });
+                    }
+                });
+        }
+
+        // Anti-flicker optimized version of updateTickerDisplay
+        function updateTickerDisplay(data, ticker) {
+            const elements = tickerElements[ticker];
+            if (!elements || !elements.price || !elements.change) return;
+
+            if (data[ticker] && data[ticker].c && data[ticker].c !== 'N/A') {
+                // Get the current price
+                const currentPrice = parseFloat(data[ticker].c);
+
+                // Check if price has actually changed
+                const previousPrice = elements.price.dataset.price ? 
+                    parseFloat(elements.price.dataset.price) : null;
+
+                // Only update if the price is different or not set yet
+                if (previousPrice === null || Math.abs(previousPrice - currentPrice) >= 0.001) {
+                    // Store new price in dataset for future comparison
+                    elements.price.dataset.price = currentPrice.toFixed(2);
+
+                    // Update the displayed price - only when it actually changes
+                    if (elements.price.textContent !== currentPrice.toFixed(2)) {
+                        elements.price.textContent = currentPrice.toFixed(2);
+                    }
+
+                    // Apply value change highlighting only on actual change
+                    if (previousPrice !== null && previousPrice !== currentPrice) {
+                        // Add subtle flash animation class based on price movement
+                        if (currentPrice > previousPrice) {
+                            // Apply class changes only when needed
+                            if (!elements.price.classList.contains('flash-green')) {
+                                elements.price.classList.remove('flash-red');
+                                elements.price.classList.add('flash-green');
+
+                                // For better performance, set a specific timer for this element
+                                const elementTimer = setTimeout(() => {
+                                    if (elements.price) {
+                                        elements.price.classList.remove('flash-green');
+                                    }
+                                    clearTimeout(elementTimer);
+                                }, 600);
+                            }
+                        } else if (currentPrice < previousPrice) {
+                            // Apply class changes only when needed
+                            if (!elements.price.classList.contains('flash-red')) {
+                                elements.price.classList.remove('flash-green');
+                                elements.price.classList.add('flash-red');
+
+                                // For better performance, set a specific timer for this element
+                                const elementTimer = setTimeout(() => {
+                                    if (elements.price) {
+                                        elements.price.classList.remove('flash-red');
+                                    }
+                                    clearTimeout(elementTimer);
+                                }, 600);
+                            }
+                        }
+                    }
+                }
+
+                // Calculate and update percentage change if available and different
+                if (data[ticker].dp !== undefined && data[ticker].dp !== null && data[ticker].dp !== 'N/A') {
+                    const percentChange = parseFloat(data[ticker].dp);
+                    const changeText = (percentChange >= 0 ? '+' : '') + percentChange.toFixed(2) + '%';
+
+                    // Only update text if it's different
+                    if (elements.change.textContent !== changeText) {
+                        elements.change.textContent = changeText;
+                    }
+
+                    // Apply positive/negative styling only if needed
+                    const isPositive = percentChange > 0;
+                    const isNegative = percentChange < 0;
+                    const hasPositive = elements.change.classList.contains('positive');
+                    const hasNegative = elements.change.classList.contains('negative');
+
+                    if (isPositive && !hasPositive) {
+                        elements.change.classList.add('positive');
+                        elements.change.classList.remove('negative');
+                    } else if (isNegative && !hasNegative) {
+                        elements.change.classList.add('negative');
+                        elements.change.classList.remove('positive');
+                    } else if (!isPositive && !isNegative && (hasPositive || hasNegative)) {
+                        elements.change.classList.remove('positive', 'negative');
+                    }
+                    // No changes if the styling is already correct
+                } else if (elements.change.textContent !== '--') {
+                    elements.change.textContent = '--';
+                    elements.change.classList.remove('positive', 'negative');
+                }
+            } else if (elements.price.textContent !== 'N/A') {
+                // Only update if current display is different
+                elements.price.textContent = 'N/A';
+                elements.change.textContent = '--';
+                elements.change.classList.remove('positive', 'negative');
+            }
+        }
+
+        // Helper function to highlight top tickers by percentage change (absolute value)
+        function highlightTopTickers(data, count) {
+            // Create array of tickers with valid percentage change data
+            const tickersWithChange = allTickers
+                .filter(ticker => 
+                    data[ticker] && 
+                    data[ticker].dp !== undefined && 
+                    data[ticker].dp !== null && 
+                    data[ticker].dp !== 'N/A'
+                )
+                .map(ticker => ({
+                    ticker,
+                    change: Math.abs(parseFloat(data[ticker].dp))
+                }));
+
+            // Sort by absolute percentage change (descending)
+            tickersWithChange.sort((a, b) => b.change - a.change);
+
+            // Highlight top N tickers
+            tickersWithChange.slice(0, count).forEach(item => {
+                const tickerCard = tickerElements[item.ticker].price.closest('.ticker-card');
+                if (tickerCard) {
+                    tickerCard.classList.add('priority');
+                }
+            });
+        }
+
+        // Update news headlines
+        function updateNewsHeadlines() {
+            fetch('/api/news')
+                .then(response => response.json())
+                .then(news => {
+                    if (news && news.length > 0) {
+                        newsContainer.innerHTML = '';
+                        news.slice(0, 5).forEach(item => {
+                            const newsItem = document.createElement('div');
+                            newsItem.className = 'list-group-item';
+
+                            // Add a badge for the ticker
+                            const tickerBadge = item.ticker ? 
+                                <span class="badge bg-primary me-2">${item.ticker}</span> : '';
+
+                            newsItem.innerHTML = 
+                                <h6 class="mb-1">${tickerBadge}${item.headline}</h6>
+                                <div class="d-flex flex-wrap justify-content-between">
+                                    <small class="text-muted">${item.source}</small>
+                                    <small class="text-muted">${item.datetime}</small>
+                                </div>
+                            ;
+                            newsContainer.appendChild(newsItem);
+                        });
+                    } else {
+                        newsContainer.innerHTML = 
+                            <div class="list-group-item text-center text-muted py-3">
+                                No news available yet
+                            </div>
+                        ;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching news:', error);
+                    newsContainer.innerHTML = 
+                        <div class="list-group-item text-center text-muted py-3">
+                            Error loading news
+                        </div>
+                    ;
+                });
+        }
+
+        // Update portfolio display
+        function updatePortfolioDisplay(marketData) {
+            // Fetch the latest portfolio data
+            fetch('/api/portfolio')
+                .then(response => response.json())
+                .then(data => {
+                    // Update the portfolio global state
+                    portfolio = data;
+
+                    // Update the portfolio summary
+                    cashBalance.textContent = $${parseFloat(portfolio.cash).toFixed(2)};
+
+                    // Calculate and display position value
+                    let posValue = 0;
+                    if (portfolio.positions && Object.keys(portfolio.positions).length > 0) {
+                        // Display holdings
+                        holdingsContainer.innerHTML = '';
+                        const table = document.createElement('table');
+                        table.className = 'table table-sm';
+                        table.innerHTML = 
+                            <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Shares</th>
+                                    <th>Avg Price</th>
+                                    <th>Current</th>
+                                    <th>Value</th>
+                                    <th>P/L</th>
+                                </tr>
+                            </thead>
+                            <tbody id="holdings-tbody"></tbody>
+                        ;
+                        holdingsContainer.appendChild(table);
+
+                        const tbody = document.getElementById('holdings-tbody');
+                        let hasPositions = false;
+
+                        for (const [ticker, position] of Object.entries(portfolio.positions)) {
+                            if (position.shares > 0) {
+                                hasPositions = true;
+                                const currentPrice = marketData[ticker] && marketData[ticker].c !== 'N/A' ? 
+                                    parseFloat(marketData[ticker].c) : position.avg_price;
+                                const value = position.shares * currentPrice;
+                                posValue += value;
+
+                                // Calculate profit/loss
+                                const costBasis = position.shares * position.avg_price;
+                                const pl = value - costBasis;
+                                const plPercent = (pl / costBasis) * 100;
+
+                                const plClass = pl >= 0 ? 'text-success' : 'text-danger';
+
+                                const row = document.createElement('tr');
+                                row.innerHTML = 
+                                    <td>${ticker.toUpperCase()}</td>
+                                    <td>${position.shares}</td>
+                                    <td>$${position.avg_price.toFixed(2)}</td>
+                                    <td>$${currentPrice.toFixed(2)}</td>
+                                    <td>$${value.toFixed(2)}</td>
+                                    <td class="${plClass}">$${pl.toFixed(2)} (${plPercent.toFixed(2)}%)</td>
+                                ;
+                                tbody.appendChild(row);
+                            }
+                        }
+
+                        if (!hasPositions) {
+                            holdingsContainer.innerHTML = <p class="text-center text-muted">No positions currently open</p>;
+                        }
+                    } else {
+                        holdingsContainer.innerHTML = <p class="text-center text-muted">No positions currently open</p>;
+                    }
+
+                    positionValue.textContent = $${posValue.toFixed(2)};
+                    totalValue.textContent = $${(portfolio.cash + posValue).toFixed(2)};
+                })
+                .catch(error => {
+                    console.error('Error fetching portfolio data:', error);
+                    // Set defaults if we can't fetch the portfolio
+                    cashBalance.textContent = '$10,000.00';
+                    positionValue.textContent = '$0.00';
+                    totalValue.textContent = '$10,000.00';
+                    holdingsContainer.innerHTML = <p class="text-center text-muted">Error loading positions</p>;
+                });
+        }
+
+        // Update portfolio growth tracking display
+        function updatePortfolioGrowth() {
+            fetch('/api/portfolio-growth')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.growth_projection) {
+                        const growth = data.growth_projection;
+                        const metrics = data.performance_metrics;
+                        const current = data.current_portfolio;
+
+                        // Update main metrics
+                        document.getElementById('growth-current-value').textContent = $${current.value.toLocaleString()};
+                        document.getElementById('growth-target-value').textContent = $${growth.target_value.toLocaleString()};
+                        document.getElementById('growth-total-return').textContent = $${metrics.total_return.toLocaleString()};
+                        document.getElementById('growth-return-percentage').textContent = (${metrics.total_return_percentage}%);
+                        document.getElementById('growth-progress-percentage').textContent = ${growth.progress_percentage}%;
+                        document.getElementById('growth-remaining-amount').textContent = $${growth.remaining_amount.toLocaleString()} to go;
+
+                        // Update progress bar
+                        const progressBar = document.getElementById('growth-progress-bar');
+                        progressBar.style.width = ${Math.min(growth.progress_percentage, 100)}%;
+                        progressBar.setAttribute('aria-valuenow', growth.progress_percentage);
+                        progressBar.textContent = ${growth.progress_percentage}% Complete;
+
+                        // Update performance metrics
+                        document.getElementById('growth-days-active').textContent = growth.days_active;
+                        document.getElementById('growth-avg-daily-return').textContent = ${growth.avg_daily_return_pct}%;
+                        document.getElementById('growth-projected-days').textContent = growth.projected_days_to_target;
+
+                        // Update trading performance
+                        document.getElementById('growth-total-trades').textContent = metrics.total_trades;
+                        document.getElementById('growth-win-rate').textContent = ${metrics.win_rate}%;
+
+                        // Update best/worst trades
+                        const bestTrade = metrics.best_trade;
+                        const worstTrade = metrics.worst_trade;
+
+                        document.getElementById('growth-best-trade').textContent = bestTrade.ticker ? 
+                            ${bestTrade.ticker}: +$${bestTrade.return.toFixed(2)} : '--';
+                        document.getElementById('growth-worst-trade').textContent = worstTrade.ticker ? 
+                            ${worstTrade.ticker}: $${worstTrade.return.toFixed(2)} : '--';
+
+                        // Color-code progress based on performance
+                        if (metrics.total_return_percentage > 0) {
+                            progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
+                        } else if (metrics.total_return_percentage < 0) {
+                            progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-danger';
+                        } else {
+                            progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-primary';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching portfolio growth data:', error);
+                });
+        }
+
+        // Update decision data
+        function updateDecisionData() {
+            fetch('/api/decision')
+                .then(response => response.json())
+                .then(data => {
+                    decisionAction.textContent = data.action || 'N/A';
+                    decisionRationale.textContent = data.rationale || 'No rationale available';
+                    decisionTime.textContent = new Date().toLocaleString();
+
+                    // Update card styling based on decision
+                    decisionCard.className = 'card trading-card';
+                    if (data.action) {
+                        const action = data.action.toLowerCase();
+                        if (action.includes('buy')) {
+                            decisionCard.classList.add('buy');
+                        } else if (action.includes('sell')) {
+                            decisionCard.classList.add('sell');
+                        } else if (action.includes('hold')) {
+                            decisionCard.classList.add('hold');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching decision data:', error);
+                });
+        }
+
+        // Update history data
+        function updateHistoryData() {
+            fetch('/api/history')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        historyContainer.innerHTML = 
+                            <div class="list-group-item text-center text-muted py-5">
+                                No trading history available yet
+                            </div>
+                        ;
+                        return;
+                    }
+
+                    historyContainer.innerHTML = '';
+                    data.forEach(item => {
+                        // Determine which class to use based on the action
+                        let actionClass = '';
+                        const action = item.decision.action.toLowerCase();
+                        if (action.includes('buy')) {
+                            actionClass = 'buy';
+                        } else if (action.includes('sell')) {
+                            actionClass = 'sell';
+                        } else if (action.includes('hold')) {
+                            actionClass = 'hold';
+                        }
+
+                        // Create the history item
+                        const historyItem = document.createElement('div');
+                        historyItem.className = list-group-item history-item ${actionClass} p-3;
+
+                        // Format the signals for display
+                        let signalsHtml = '';
+                        if (item.signals) {
+                            if (item.signals.spy && item.signals.spy.c) {
+                                signalsHtml += <span class="badge bg-secondary signal-badge me-2">SPY: ${item.signals.spy.c}</span>;
+                            }
+                            if (item.signals.qqq && item.signals.qqq.c) {
+                                signalsHtml += <span class="badge bg-secondary signal-badge me-2">QQQ: ${item.signals.qqq.c}</span>;
+                            }
+                            if (item.signals.vixy && item.signals.vixy.c) {
+                                signalsHtml += <span class="badge bg-secondary signal-badge me-2">VIXY: ${item.signals.vixy.c}</span>;
+                            }
+                        }
+
+                        historyItem.innerHTML = 
+                            <div class="d-flex flex-wrap justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">${item.decision.action}</h6>
+                                    <p class="mb-1">${item.decision.rationale}</p>
+                                </div>
+                                <small class="text-muted">${item.timestamp}</small>
+                            </div>
+                            <div class="mt-2">
+                                ${signalsHtml}
+                            </div>
+                        ;
+
+                        historyContainer.appendChild(historyItem);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching history data:', error);
+                });
+        }
+
+        // Update bot status
+        function updateBotStatus() {
+            fetch('/api/status')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(HTTP error: ${response.status});
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Ensure data is not empty
+                    if (!data) {
+                        console.warn('Empty response from status API');
+                        data = {
+                            running: false,
+                            last_run: null,
+                            next_run: null
+                        };
+                    }
+
+                    // Handle undefined data.running
+                    const isRunning = typeof data.running === 'boolean' ? data.running : false;
+
+                    if (isRunning) {
+                        botStatusIndicator.classList.add('active');
+                        botStatusText.textContent = 'Running';
+                        startBotBtn.classList.add('d-none');
+                        stopBotBtn.classList.remove('d-none');
+                    } else {
+                        botStatusIndicator.classList.remove('active');
+                        botStatusText.textContent = 'Stopped';
+                        startBotBtn.classList.remove('d-none');
+                        stopBotBtn.classList.add('d-none');
+                    }
+
+                    lastRunTime.textContent = data.last_run || '--';
+                    nextRunTime.textContent = data.next_run || '--';
+                })
+                .catch(error => {
+                    console.error('Error fetching bot status:', error);
+                    // Set default UI state when there's an error
+                    botStatusIndicator.classList.remove('active');
+                    botStatusText.textContent = 'Unknown';
+                    startBotBtn.classList.remove('d-none');
+                    stopBotBtn.classList.add('d-none');
+                    lastRunTime.textContent = '--';
+                    nextRunTime.textContent = '--';
+                });
+        }
+
+        // Start the bot
+        startBotBtn.addEventListener('click', () => {
+            fetch('/api/start-bot', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateBotStatus();
+                    } else {
+                        alert('Failed to start bot: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error starting bot:', error);
+                    alert('Error starting bot. Please check console for details.');
+                });
+        });
+
+        // Stop the bot
+        stopBotBtn.addEventListener('click', () => {
+            fetch('/api/stop-bot', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateBotStatus();
+                    } else {
+                        alert('Failed to stop bot: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error stopping bot:', error);
+                    alert('Error stopping bot. Please check console for details.');
+                });
+        });
+
+        // Run trading cycle now
+        runNowBtn.addEventListener('click', () => {
+            runNowBtn.disabled = true;
+            runNowBtn.textContent = 'Processing...';
+
+            fetch('/api/run-now', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateMarketData();
+                        updateDecisionData();
+                        updateHistoryData();
+                        updateBotStatus();
+                    } else {
+                        alert('Failed to run trading cycle: ' + data.message);
+                    }
+                    runNowBtn.disabled = false;
+                    runNowBtn.textContent = 'Generate New Decision';
+                })
+                .catch(error => {
+                    console.error('Error running trading cycle:', error);
+                    alert('Error running trading cycle. Please check console for details.');
+                    runNowBtn.disabled = false;
+                    runNowBtn.textContent = 'Generate New Decision';
+                });
+        });
+
+        // Log daily portfolio value for longevity tracking
+        const logDailyBtn = document.getElementById('log-daily-btn');
+        logDailyBtn.addEventListener('click', () => {
+            logDailyBtn.disabled = true;
+            logDailyBtn.textContent = 'Logging...';
+
+            fetch('/api/log-daily-portfolio', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Daily portfolio value logged successfully! Check your Google Sheet for longevity tracking.');
+                        updatePortfolioGrowth(); // Refresh growth metrics
+                    } else {
+                        alert('Failed to log daily portfolio: ' + data.message);
+                    }
+                    logDailyBtn.disabled = false;
+                    logDailyBtn.textContent = 'Log Daily Portfolio Value';
+                })
+                .catch(error => {
+                    console.error('Error logging daily portfolio:', error);
+                    alert('Error logging daily portfolio. Please check console for details.');
+                    logDailyBtn.disabled = false;
+                    logDailyBtn.textContent = 'Log Daily Portfolio Value';
+                });
+        });
+
+        // Refresh market signals
+        // Manual refresh button removed in favor of automatic 45-second updates
+
+        // Initialize the dashboard
+        function initialize() {
+            updateMarketData();
+            updateDecisionData();
+            updateHistoryData();
+            updateNewsHeadlines();
+            updatePortfolioGrowth();
+            updateBotStatus();
+
+            // Set up auto-refresh intervals with different frequencies
+
+            // Auto-refresh market data every 45 seconds
+            let lastMarketDataRefreshTime = Date.now();
+            const UPDATE_INTERVAL = 60000; // 60 seconds between updates (reduced to respect API rate limits)
+
+            // Get reference to the timestamp display element in the footer
+            const lastUpdateTimestamp = document.getElementById('last-update-timestamp');
+
+            // Function to format timestamp
+            function formatTimestamp(timestamp) {
+                const date = new Date(timestamp);
+                const hours = date.getHours();
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                const seconds = date.getSeconds().toString().padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                const formattedHours = (hours % 12) || 12; // Convert to 12-hour format
+                return ${formattedHours}:${minutes}:${seconds} ${ampm};
+            }
+
+            // Update the timestamp display
+            function updateLastUpdateTime() {
+                if (lastUpdateTimestamp) {
+                    lastUpdateTimestamp.textContent = Last updated: ${formatTimestamp(lastMarketDataRefreshTime)};
+                }
+            }
+
+            // Function to trigger market data refresh
+            function refreshMarketData() {
+                if (document.visibilityState === 'visible') {
+                    // Only update if tab is visible
+                    window.requestAnimationFrame(() => {
+                        updateMarketData();
+                        lastMarketDataRefreshTime = Date.now();
+                        updateLastUpdateTime();
+                    });
+                }
+            }
+
+            // Initial market data update and timestamp
+            refreshMarketData();
+            updateLastUpdateTime(); // Ensure timestamp is displayed immediately
+
+            // Schedule regular updates every 45 seconds
+            setInterval(refreshMarketData, UPDATE_INTERVAL);
+
+            // 2. Bot status refresh - every 10 seconds
+            const botStatusInterval = setInterval(() => {
+                updateBotStatus();
+            }, 10000); // Every 10 seconds
+
+            // 3. Other data refresh - every minute
+            const otherDataInterval = setInterval(() => {
+                updateDecisionData();
+                updateHistoryData();
+                updateNewsHeadlines();
+                updatePortfolioGrowth();
+            }, 60000); // Every minute
+
+            // Add performance monitoring
+            let apiCallCount = 0;
+            const maxCallsPerMinute = 70; // Reasonable limit
+
+            // Intercept the updateMarketData function to add rate limiting
+            const originalUpdateMarketData = updateMarketData;
+            updateMarketData = function() {
+                // Count API calls
+                apiCallCount++;
+
+                // If we exceed our rate limit, skip this update
+                if (apiCallCount > maxCallsPerMinute) {
+                    console.log("Rate limiting API calls, skipping market data update");
+                    return;
+                }
+
+                // Call the original function
+                originalUpdateMarketData();
+            };
+
+            // Reset counter every minute
+            setInterval(() => {
+                apiCallCount = 0;
+            }, 60000);
+        }
+
+        // Start the dashboard when the page loads
+        window.addEventListener('load', initialize);
+    </script>
+
+    <!-- Footer with last update timestamp -->
+    <footer class="container mt-5 pb-3">
+        <div class="row">
+            <div class="col-12">
+                <hr>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="text-muted small">
+                        <strong>Nexus Gate Fund</strong> | Market Data Auto-Refresh: 45 seconds
+                    </div>
+                    <div id="last-update-timestamp" class="text-muted small">
+                        Last updated: --
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

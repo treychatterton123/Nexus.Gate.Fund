@@ -5,7 +5,7 @@ import logging
 import json
 import time
 from datetime import datetime, timedelta
-import trading_bot
+import main
 
 # Configure logging
 logging.basicConfig(
@@ -26,10 +26,10 @@ bot_thread = None
 def index():
     """Render the main dashboard page"""
     return render_template('index.html', 
-                          signals=trading_bot.latest_signals,
-                          decision=trading_bot.latest_decision,
-                          history=trading_bot.trading_history,
-                          status=trading_bot.bot_status)
+                          signals=main.latest_signals,
+                          decision=main.latest_decision,
+                          history=main.trading_history,
+                          status=main.bot_status)
 
 # Cache market data in memory with timestamp  
 market_data_cache = {
@@ -61,7 +61,7 @@ def market_data():
             })
         
         # Fetch fresh data from trading bot module
-        fresh_signals = trading_bot.get_market_signals()
+        fresh_signals = main.get_market_signals()
         
         # Update cache
         market_data_cache["timestamp"] = current_time
@@ -77,33 +77,33 @@ def market_data():
 @app.route('/api/decision')
 def decision():
     """API endpoint to get the latest trading decision"""
-    return jsonify(trading_bot.latest_decision)
+    return jsonify(main.latest_decision)
 
 @app.route('/api/history')
 def history():
     """API endpoint to get trading history"""
-    return jsonify(trading_bot.trading_history)
+    return jsonify(main.trading_history)
 
 @app.route('/api/status')
 def status():
     """API endpoint to get the bot's status"""
-    return jsonify(trading_bot.bot_status)
+    return jsonify(main.bot_status)
 
 @app.route('/api/portfolio')
 def get_portfolio():
     """API endpoint to get the current portfolio status"""
     try:
-        signals = trading_bot.get_market_signals()
-        portfolio_value = trading_bot.calculate_portfolio_value(signals)
+        signals = main.get_market_signals()
+        portfolio_value = main.calculate_portfolio_value(signals)
         
         # Count active positions
-        active_positions = sum(1 for pos in trading_bot.portfolio["positions"].values() if pos["shares"] > 0)
+        active_positions = sum(1 for pos in main.portfolio["positions"].values() if pos["shares"] > 0)
         
         return jsonify({
-            "cash": trading_bot.portfolio["cash"],
+            "cash": main.portfolio["cash"],
             "total_value": portfolio_value,
             "active_positions": active_positions,
-            "positions": {k: v for k, v in trading_bot.portfolio["positions"].items() if v["shares"] > 0}
+            "positions": {k: v for k, v in main.portfolio["positions"].items() if v["shares"] > 0}
         })
     except Exception as e:
         logger.error(f"Error getting portfolio: {str(e)}")
@@ -113,7 +113,7 @@ def get_portfolio():
 def run_now():
     """API endpoint to trigger an immediate trading cycle"""
     try:
-        result = trading_bot.run_trading_cycle_api()
+        result = main.run_trading_cycle_api()
         
         if "error" in result:
             return jsonify({"success": False, "error": result["error"]}), 500
@@ -136,8 +136,8 @@ def start_bot():
         # Reset stop event and start new thread
         stop_event.clear()
         bot_thread = threading.Thread(
-            target=trading_bot.run_bot_thread,
-            args=(stop_event, trading_bot.update_status)
+            target=main.run_bot_thread,
+            args=(stop_event, main.update_status)
         )
         bot_thread.daemon = True
         bot_thread.start()
@@ -173,7 +173,7 @@ def stop_bot():
 def news():
     """API endpoint to get the latest market news"""
     try:
-        news_headlines = trading_bot.get_news_headlines()
+        news_headlines = main.get_news_headlines()
         return jsonify(news_headlines)
     except Exception as e:
         logger.error(f"Error getting news: {str(e)}")
@@ -181,7 +181,7 @@ def news():
 
 def update_status(signals=None, decision=None, action=None, rationale=None):
     """Callback function to update the bot's status and trading data"""
-    trading_bot.update_status(signals, decision, action, rationale)
+    main.update_status(signals, decision, action, rationale)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
